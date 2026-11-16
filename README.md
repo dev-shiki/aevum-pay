@@ -50,6 +50,18 @@ flowchart LR
 | Faucet | `https://faucet.qday.info/en` |
 | Live Deployed `AevumPayRouter` | [`0x2AfEEC24f2a810D726DB47CAEa3A76AaF6A7D50E`](https://explorer-test.qday.info/address/0x2AfEEC24f2a810D726DB47CAEa3A76AaF6A7D50E) (Block `3300314`, Deploy Tx: [`0xb71451a2...5dc4bd1`](https://explorer-test.qday.info/tx/0xb71451a2dc4b4c0329d25133de4c6659920389ecc4087f0f8c870b26b5dc4bd1)) |
 
+### Live Verified End-to-End `tUSD8` Transactions (Block `3300689`)
+
+| Step | Action | Explorer Tx |
+|---|---|---|
+| 1 | `registerPayee("shiki-merchant.aevum")` | [`0xd4aa8bb6...025f50`](https://explorer-test.qday.info/tx/0xd4aa8bb61181f3ecafcc4702284008772b9d95fe16fd01bd819182b1b4025f50) |
+| 2 | `tUSD8.approve(AevumPayRouter, 2.00 tUSD8)` | [`0xfba7a786...402e33`](https://explorer-test.qday.info/tx/0xfba7a78608458970934473197295c29a0219b463e87fbac26c76f50b90402e33) |
+| 3 | `createInvoice` (1.00 `tUSD8` Direct + CoP) | [`0x141bf70e...ef22fed`](https://explorer-test.qday.info/tx/0x141bf70ee5e72c3283922f5254e6bbb9c18072e6afb2ca6c17e2f81e0ef22fed) |
+| 4 | `payDirectInvoice` (1.00 `tUSD8` settled) | [`0x7380aec7...7db35d`](https://explorer-test.qday.info/tx/0x7380aec7d8e300d76bf91ff08896d6b1018989eab557c0bd2d3498c0b67db35d) |
+| 5 | `createAgentSession` (ERC-8004 `#1`, 0.50/tx, 1.00 cap) | [`0x7d663db1...feda3d`](https://explorer-test.qday.info/tx/0x7d663db19aa2c23311c849af5b277c5331a746626e49d13824a66508a0feda3d) |
+| 6 | `createInvoice` (0.50 `tUSD8` Agent-scoped) | [`0xddfb23db...e7d0e42`](https://explorer-test.qday.info/tx/0xddfb23db85dba1408d917ecb8bff17762c6c0984c3eb9bbd1e05cb985e7d0e42) |
+| 7 | `payDirectWithSession` (0.50 `tUSD8` via Agent Session) | [`0xf623ce24...ecfcd8a`](https://explorer-test.qday.info/tx/0xf623ce2494eeed7fe346c4fc3a41cef1d8662ecba4329718158aa3fe9ecfcd8a) |
+
 ## Quickstart
 
 ### 1. Run Foundry Tests
