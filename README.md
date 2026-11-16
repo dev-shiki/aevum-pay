@@ -48,6 +48,7 @@ flowchart LR
 | Test Stablecoin (`tUSD8`) | `0x456569838f1d43009A91ebA4263147Afd7233483` (6 decimals) |
 | Block Explorer | `https://explorer-test.qday.info` |
 | Faucet | `https://faucet.qday.info/en` |
+| Live Deployed `AevumPayRouter` | [`0x2AfEEC24f2a810D726DB47CAEa3A76AaF6A7D50E`](https://explorer-test.qday.info/address/0x2AfEEC24f2a810D726DB47CAEa3A76AaF6A7D50E) (Block `3300314`, Deploy Tx: [`0xb71451a2...5dc4bd1`](https://explorer-test.qday.info/tx/0xb71451a2dc4b4c0329d25133de4c6659920389ecc4087f0f8c870b26b5dc4bd1)) |
 
 ## Quickstart
 
