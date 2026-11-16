@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AevumPay — tUSD8 Invoice, CoP & Escrow Router</title>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #151a23;
+      --border: #262e3d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #2ea043;
+      --accent-hover: #3fb950;
+      --danger: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px 16px;
+    }
+    .container { max-width: 920px; margin: 0 auto; }
+    header {
+      display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px;
+    }
+    h1 { font-size: 1.35rem; margin: 0; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin: 4px 0 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px;
+    }
+    .card h2 { font-size: 1.05rem; margin: 0 0 12px; }
+    label { display: block; font-size: 0.82rem; color: var(--muted); margin: 10px 0 4px; }
+    input, select {
+      width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border);
+      background: #0d1117; color: var(--text); font-size: 0.9rem; min-height: 44px;
+    }
+    button {
+      margin-top: 12px; padding: 10px 16px; min-height: 44px; border-radius: 6px; border: 0;
+      background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; font-size: 0.9rem;
+    }
+    button:hover { background: var(--accent-hover); }
+    button.secondary { background: #21262d; border: 1px solid var(--border); }
+    button.secondary:hover { background: #30363d; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .status {
+      margin-top: 16px; padding: 12px; border-radius: 8px; background: #0d1117;
+      border: 1px solid var(--border); font-family: ui-monospace, monospace; font-size: 0.82rem;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    .pill {
+      display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem;
+      background: #1f2937; border: 1px solid var(--border); color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>AevumPay — Stablecoin Invoice &amp; Escrow Router</h1>
+        <p class="sub">Aevum Testnet (Chain ID 44005) &middot; tUSD8 (<code>0x4565...3483</code>)</p>
+      </div>
+      <div class="row">
+        <span id="walletPill" class="pill">Disconnected</span>
+        <button id="connectBtn" type="button">Connect &amp; Switch to Aevum</button>
+      </div>
+    </header>
+
+    <div class="card" style="margin-bottom: 16px;">
+      <h2>Router &amp; Balances</h2>
+      <div class="grid">
+        <div>
+          <label for="routerAddr">AevumPayRouter Address</label>
+          <input id="routerAddr" placeholder="0x... (deployed AevumPayRouter)" />
+        </div>
+        <div>
+          <label>Connected Balances</label>
+          <div id="balances" class="status" style="margin-top: 0;">tQDAY: -- | tUSD8: --</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>1. Confirmation of Payee (CoP)</h2>
+        <label for="copHandle">Your Payee Handle</label>
+        <input id="copHandle" placeholder="acme-studio.aevum" />
+        <label for="copMeta">Metadata Hash (optional bytes32 or text)</label>
+        <input id="copMeta" placeholder="kyb-v1" />
+        <button id="registerPayeeBtn" type="button">Register Payee</button>
+
+        <hr style="border-color: var(--border); margin: 16px 0;" />
+        <label for="verifyAddr">Verify Payee Address</label>
+        <input id="verifyAddr" placeholder="0x..." />
+        <label for="verifyHandle">Expected Handle</label>
+        <input id="verifyHandle" placeholder="acme-studio.aevum" />
+        <button id="verifyPayeeBtn" class="secondary" type="button">Confirm Payee</button>
+      </div>
+
+      <div class="card">
+        <h2>2. Create tUSD8 Invoice</h2>
+        <label for="invAmount">Amount (tUSD8, 6 decimals)</label>
+        <input id="invAmount" type="number" step="0.01" value="10" />
+        <label for="invMode">Payment Mode</label>
+        <select id="invMode">
+          <option value="0">Direct (Atomic Split)</option>
+          <option value="1">Escrow (Protected)</option>
+        </select>
+        <label for="invPayer">Expected Payer (optional, blank = open)</label>
+        <input id="invPayer" placeholder="0x0000000000000000000000000000000000000000" />
+        <label for="invArbiter">Arbiter (optional, for Escrow disputes)</label>
+        <input id="invArbiter" placeholder="0x0000000000000000000000000000000000000000" />
+        <label for="invHandle">Enforce CoP Handle (optional)</label>
+        <input id="invHandle" placeholder="acme-studio.aevum" />
+        <label for="invRecipient">Primary Split Recipient (100%)</label>
+        <input id="invRecipient" placeholder="0x... (defaults to your address)" />
+        <button id="createInvBtn" type="button">Create Invoice</button>
+      </div>
+
+      <div class="card">
+        <h2>3. Payer &amp; Escrow Actions</h2>
+        <label for="actInvId">Invoice ID</label>
+        <input id="actInvId" type="number" min="1" value="1" />
+        <div class="row">
+          <button id="inspectInvBtn" class="secondary" type="button">Inspect</button>
+          <button id="approveBtn" class="secondary" type="button">Approve tUSD8</button>
+          <button id="payDirectBtn" type="button">Pay Direct</button>
+          <button id="fundEscrowBtn" type="button">Fund Escrow</button>
+          <button id="releaseEscrowBtn" type="button">Release Escrow</button>
+          <button id="refundEscrowBtn" class="secondary" type="button">Refund Expired</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>4. Agent Session Guardrails (ERC-8004)</h2>
+        <label for="sessKey">Agent Session Key (0x...)</label>
+        <input id="sessKey" placeholder="0x... (AI agent hot key)" />
+        <label for="sessAgentId">ERC-8004 Agent ID (uint256)</label>
+        <input id="sessAgentId" type="number" min="1" value="8004001" />
+        <label for="sessRegistry">ERC-8004 Identity Registry (optional, blank = tag only)</label>
+        <input id="sessRegistry" placeholder="0x0000000000000000000000000000000000000000" />
+        <label for="sessAllowedPayee">Allowed Payee (blank = any CoP-verified payee)</label>
+        <input id="sessAllowedPayee" placeholder="0x0000000000000000000000000000000000000000" />
+        <div class="row">
+          <div style="flex: 1; min-width: 120px;">
+            <label for="sessMaxPerTx">Max Per-Tx (tUSD8)</label>
+            <input id="sessMaxPerTx" type="number" step="0.01" value="25" />
+          </div>
+          <div style="flex: 1; min-width: 120px;">
+            <label for="sessTotalBudget">Total Budget (tUSD8)</label>
+            <input id="sessTotalBudget" type="number" step="0.01" value="100" />
+          </div>
+          <div style="flex: 1; min-width: 100px;">
+            <label for="sessExpiryHours">Expiry (hrs)</label>
+            <input id="sessExpiryHours" type="number" min="1" value="24" />
+          </div>
+        </div>
+        <button id="grantSessionBtn" type="button">Grant Agent Session</button>
+
+        <hr style="border-color: var(--border); margin: 16px 0;" />
+        <label for="sessId">Session ID (bytes32)</label>
+        <input id="sessId" placeholder="0x..." />
+        <div class="row">
+          <button id="inspectSessionBtn" class="secondary" type="button">Inspect Session</button>
+          <button id="revokeSessionBtn" class="secondary" style="border-color: var(--danger); color: var(--danger);" type="button">Revoke Session</button>
+          <button id="payWithSessionBtn" type="button">Pay Direct (Session)</button>
+          <button id="fundWithSessionBtn" type="button">Fund Escrow (Session)</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="log" class="status">Ready. Connect MetaMask or any EIP-1193 wallet to Aevum Testnet (44005).</div>
+  </div>
+
+  <script type="module">
+    import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
+
+    const AEVUM_CHAIN_ID_HEX = "0xabe5"; // 44005
+    const TUSD8_ADDRESS = "0x456569838f1d43009A91ebA4263147Afd7233483";
+    const ERC20_ABI = [
+      "function balanceOf(address) view returns (uint256)",
+      "function approve(address spender, uint256 value) returns (bool)"
+    ];
+    const ROUTER_ABI = [
+      "function registerPayee(string handle, bytes32 metadataHash)",
+      "function confirmPayee(address payee, bytes32 expectedHandleHash) view returns (bool verified, string handle, bytes32 metadataHash)",
+      "function createInvoice((address token, address expectedPayer, address arbiter, uint128 amount, uint64 deadline, uint8 mode, bytes32 expectedPayeeHandleHash, bytes32 memoHash, (address recipient, uint16 bps)[] splits) params) returns (uint256)",
+      "function payDirectInvoice(uint256 invoiceId)",
+      "function fundEscrow(uint256 invoiceId)",
+      "function releaseEscrow(uint256 invoiceId)",
+      "function refundExpiredEscrow(uint256 invoiceId)",
+      "function getInvoice(uint256 invoiceId) view returns ((address token, address payee, address expectedPayer, address fundedBy, address arbiter, uint128 amount, uint64 deadline, uint64 createdAt, uint64 settledAt, uint8 mode, uint8 status, bytes32 expectedPayeeHandleHash, bytes32 memoHash), (address recipient, uint16 bps)[])",
+      "function createAgentSession((address sessionKey, address allowedPayee, address agentRegistry, uint128 maxPerTxAmount, uint128 totalBudget, uint64 expiresAt, uint256 agentId) params) returns (bytes32)",
+      "function revokeAgentSession(bytes32 sessionId)",
+      "function payDirectWithSession(bytes32 sessionId, uint256 invoiceId)",
+      "function fundEscrowWithSession(bytes32 sessionId, uint256 invoiceId)",
+      "function getAgentSession(bytes32 sessionId) view returns ((address owner, address sessionKey, address allowedPayee, address agentRegistry, uint128 maxPerTxAmount, uint128 totalBudget, uint128 spent, uint64 expiresAt, bool active, uint256 agentId))",
+      "function isSessionActive(bytes32 sessionId) view returns (bool)",
+      "event AgentSessionCreated(bytes32 indexed sessionId, address indexed owner, address indexed sessionKey, uint256 agentId, address allowedPayee, address agentRegistry, uint128 maxPerTxAmount, uint128 totalBudget, uint64 expiresAt)"
+    ];
+
+    let provider, signer, userAddr;
+    const logEl = document.getElementById("log");
+    const log = (msg) => { logEl.textContent = msg; };
+
+    function getRouter(writable = false) {
+      const addr = document.getElementById("routerAddr").value.trim();
+      if (!ethers.isAddress(addr)) throw new Error("Enter a valid AevumPayRouter address.");
+      return new ethers.Contract(addr, ROUTER_ABI, writable ? signer : provider);
+    }
+
+    async function refreshBalances() {
+      if (!provider || !userAddr) return;
+      const nativeBal = await provider.getBalance(userAddr);
+      const tusd8 = new ethers.Contract(TUSD8_ADDRESS, ERC20_ABI, provider);
+      const tokenBal = await tusd8.balanceOf(userAddr);
+      document.getElementById("balances").textContent =
+        `tQDAY: ${ethers.formatEther(nativeBal)} | tUSD8: ${ethers.formatUnits(tokenBal, 6)}`;
+    }
+
+    document.getElementById("connectBtn").onclick = async () => {
+      try {
+        if (!window.ethereum) throw new Error("No EIP-1193 wallet found (install MetaMask).");
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: AEVUM_CHAIN_ID_HEX }]
+          });
+        } catch (err) {
+          if (err.code === 4902) {
+            await window.ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: AEVUM_CHAIN_ID_HEX,
+                chainName: "QDay Aevum Testnet",
+                rpcUrls: ["https://rpc-test.qday.info"],
+                nativeCurrency: { name: "tQDAY", symbol: "tQDAY", decimals: 18 },
+                blockExplorerUrls: ["https://explorer-test.qday.info"]
+              }]
+            });
+          } else {
+            throw err;
+          }
+        }
+        provider = new ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
+        userAddr = await signer.getAddress();
+        document.getElementById("walletPill").textContent = `${userAddr.slice(0, 6)}...${userAddr.slice(-4)}`;
+        await refreshBalances();
+        log(`Connected: ${userAddr} on Aevum Testnet (44005).`);
+      } catch (e) {
+        log(`Error: ${e.message}`);
+      }
+    };
+
+    document.getElementById("registerPayeeBtn").onclick = async () => {
+      try {
+        const handle = document.getElementById("copHandle").value.trim();
+        const metaRaw = document.getElementById("copMeta").value.trim();
+        const metaHash = metaRaw.startsWith("0x") && metaRaw.length === 66
+          ? metaRaw
+          : ethers.id(metaRaw || "default");
+        const tx = await getRouter(true).registerPayee(handle, metaHash);
+        log(`Submitted registerPayee: ${tx.hash}`);
+        await tx.wait();
+        log(`Payee registered: "${handle}" (${tx.hash})`);
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    document.getElementById("verifyPayeeBtn").onclick = async () => {
+      try {
+        const addr = document.getElementById("verifyAddr").value.trim();
+        const handle = document.getElementById("verifyHandle").value.trim();
+        const [verified, regHandle, metaHash] = await getRouter(false).confirmPayee(addr, ethers.id(handle));
+        log(`CoP Result -> verified: ${verified}, handle: "${regHandle}", metadataHash: ${metaHash}`);
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    document.getElementById("createInvBtn").onclick = async () => {
+      try {
+        const amt = ethers.parseUnits(document.getElementById("invAmount").value || "0", 6);
+        const mode = Number(document.getElementById("invMode").value);
+        const expectedPayer = document.getElementById("invPayer").value.trim() || ethers.ZeroAddress;
+        const arbiter = document.getElementById("invArbiter").value.trim() || ethers.ZeroAddress;
+        const copHandle = document.getElementById("invHandle").value.trim();
+        const recipient = document.getElementById("invRecipient").value.trim() || userAddr;
+        const deadline = Math.floor(Date.now() / 1000) + 86400 * 3;
+        const params = {
+          token: TUSD8_ADDRESS,
+          expectedPayer,
+          arbiter,
+          amount: amt,
+          deadline,
+          mode,
+          expectedPayeeHandleHash: copHandle ? ethers.id(copHandle) : ethers.ZeroHash,
+          memoHash: ethers.id(`inv-${Date.now()}`),
+          splits: [{ recipient, bps: 10000 }]
+        };
+        const tx = await getRouter(true).createInvoice(params);
+        log(`Submitted createInvoice: ${tx.hash}`);
+        await tx.wait();
+        log(`Invoice created! Tx: ${tx.hash}`);
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    document.getElementById("inspectInvBtn").onclick = async () => {
+      try {
+        const id = Number(document.getElementById("actInvId").value);
+        const [inv, splits] = await getRouter(false).getInvoice(id);
+        const statuses = ["Open", "Funded", "Paid", "Refunded", "Disputed", "Cancelled"];
+        const modes = ["Direct", "Escrow"];
+        log(JSON.stringify({
+          invoiceId: id,
+          mode: modes[Number(inv.mode)],
+          status: statuses[Number(inv.status)],
+          amount_tUSD8: ethers.formatUnits(inv.amount, 6),
+          payee: inv.payee,
+          fundedBy: inv.fundedBy,
+          deadline: new Date(Number(inv.deadline) * 1000).toISOString(),
+          splits: splits.map(s => ({ recipient: s.recipient, bps: Number(s.bps) }))
+        }, null, 2));
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    document.getElementById("approveBtn").onclick = async () => {
+      try {
+        const id = Number(document.getElementById("actInvId").value);
+        const [inv] = await getRouter(false).getInvoice(id);
+        const tusd8 = new ethers.Contract(TUSD8_ADDRESS, ERC20_ABI, signer);
+        const tx = await tusd8.approve(await getRouter(false).getAddress(), inv.amount);
+        log(`Approving ${ethers.formatUnits(inv.amount, 6)} tUSD8: ${tx.hash}`);
+        await tx.wait();
+        log(`Approved! Tx: ${tx.hash}`);
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    const runAction = (fnName) => async () => {
+      try {
+        const id = Number(document.getElementById("actInvId").value);
+        const tx = await getRouter(true)[fnName](id);
+        log(`Submitted ${fnName}(${id}): ${tx.hash}`);
+        await tx.wait();
+        await refreshBalances();
+        log(`${fnName}(${id}) confirmed! Tx: ${tx.hash}`);
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    document.getElementById("payDirectBtn").onclick = runAction("payDirectInvoice");
+    document.getElementById("fundEscrowBtn").onclick = runAction("fundEscrow");
+    document.getElementById("releaseEscrowBtn").onclick = runAction("releaseEscrow");
+    document.getElementById("refundEscrowBtn").onclick = runAction("refundExpiredEscrow");
+
+    document.getElementById("grantSessionBtn").onclick = async () => {
+      try {
+        const sessionKey = document.getElementById("sessKey").value.trim();
+        if (!ethers.isAddress(sessionKey)) throw new Error("Enter a valid agent sessionKey address.");
+        const allowedPayee = document.getElementById("sessAllowedPayee").value.trim() || ethers.ZeroAddress;
+        const agentRegistry = document.getElementById("sessRegistry").value.trim() || ethers.ZeroAddress;
+        const maxPerTxAmount = ethers.parseUnits(document.getElementById("sessMaxPerTx").value || "0", 6);
+        const totalBudget = ethers.parseUnits(document.getElementById("sessTotalBudget").value || "0", 6);
+        const hours = Number(document.getElementById("sessExpiryHours").value || "24");
+        const expiresAt = Math.floor(Date.now() / 1000) + Math.max(1, hours) * 3600;
+        const agentId = BigInt(document.getElementById("sessAgentId").value || "1");
+
+        const router = getRouter(true);
+        const tx = await router.createAgentSession({
+          sessionKey,
+          allowedPayee,
+          agentRegistry,
+          maxPerTxAmount,
+          totalBudget,
+          expiresAt,
+          agentId
+        });
+        log(`Submitted createAgentSession: ${tx.hash}`);
+        const receipt = await tx.wait();
+        const parsed = receipt.logs
+          .map((l) => { try { return router.interface.parseLog(l); } catch { return null; } })
+          .find((l) => l && l.name === "AgentSessionCreated");
+        if (parsed) {
+          document.getElementById("sessId").value = parsed.args.sessionId;
+          log(`Agent session granted! sessionId: ${parsed.args.sessionId} (Tx: ${tx.hash})`);
+        } else {
+          log(`Agent session granted! Tx: ${tx.hash}`);
+        }
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    document.getElementById("inspectSessionBtn").onclick = async () => {
+      try {
+        const sessionId = document.getElementById("sessId").value.trim();
+        const router = getRouter(false);
+        const [sess, isValid] = await Promise.all([
+          router.getAgentSession(sessionId),
+          router.isSessionActive(sessionId)
+        ]);
+        log(JSON.stringify({
+          sessionId,
+          currentlyValid: isValid,
+          activeFlag: sess.active,
+          owner: sess.owner,
+          sessionKey: sess.sessionKey,
+          agentId: sess.agentId.toString(),
+          agentRegistry: sess.agentRegistry,
+          allowedPayee: sess.allowedPayee === ethers.ZeroAddress ? "ANY_COP_VERIFIED" : sess.allowedPayee,
+          maxPerTx_tUSD8: ethers.formatUnits(sess.maxPerTxAmount, 6),
+          totalBudget_tUSD8: ethers.formatUnits(sess.totalBudget, 6),
+          spent_tUSD8: ethers.formatUnits(sess.spent, 6),
+          expiresAt: new Date(Number(sess.expiresAt) * 1000).toISOString()
+        }, null, 2));
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    document.getElementById("revokeSessionBtn").onclick = async () => {
+      try {
+        const sessionId = document.getElementById("sessId").value.trim();
+        const tx = await getRouter(true).revokeAgentSession(sessionId);
+        log(`Submitted revokeAgentSession: ${tx.hash}`);
+        await tx.wait();
+        log(`Session revoked instantly! (${sessionId})`);
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    const runSessionAction = (fnName) => async () => {
+      try {
+        const sessionId = document.getElementById("sessId").value.trim();
+        const invoiceId = Number(document.getElementById("actInvId").value);
+        const tx = await getRouter(true)[fnName](sessionId, invoiceId);
+        log(`Submitted ${fnName}(${sessionId}, ${invoiceId}): ${tx.hash}`);
+        await tx.wait();
+        await refreshBalances();
+        log(`${fnName} confirmed! Tx: ${tx.hash}`);
+      } catch (e) { log(`Error: ${e.message}`); }
+    };
+
+    document.getElementById("payWithSessionBtn").onclick = runSessionAction("payDirectWithSession");
+    document.getElementById("fundWithSessionBtn").onclick = runSessionAction("fundEscrowWithSession");
+  </script>
+</body>
+</html>
