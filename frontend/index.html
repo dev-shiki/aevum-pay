@@ -87,6 +87,25 @@
       </div>
     </div>
 
+    <div class="card" style="margin-bottom: 16px;">
+      <div class="row" style="justify-content: space-between; align-items: center;">
+        <h2 style="margin: 0;">Live On-Chain Inspector (Read-Only &middot; No Wallet Required)</h2>
+        <button id="refreshTelemetryBtn" class="secondary" type="button" style="margin-top: 0;">Refresh Chain State</button>
+      </div>
+      <div class="grid" style="margin-top: 10px;">
+        <div>
+          <label for="inspectOwnerAddr">Inspect Merchant / Principal Address</label>
+          <input id="inspectOwnerAddr" value="0x8e62f1cffcc52D4C3B18fD61f8917cB33BA0D5E6" placeholder="0x..." />
+        </div>
+        <div>
+          <label>Live Testnet Telemetry (rpc-test.qday.info)</label>
+          <div id="telemetrySummary" class="status" style="margin-top: 0;">Loading live Aevum Testnet state...</div>
+        </div>
+      </div>
+      <label>Live On-Chain Invoices, CoP &amp; Agent Sessions</label>
+      <div id="telemetryDetails" class="status" style="margin-top: 0; max-height: 280px; overflow-y: auto;">Fetching from 0x2AfEEC24f2a810D726DB47CAEa3A76AaF6A7D50E...</div>
+    </div>
+
     <div class="grid">
       <div class="card">
         <h2>1. Confirmation of Payee (CoP)</h2>
@@ -182,6 +201,7 @@
   <script type="module">
     import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
 
+    const AEVUM_RPC_URL = "https://rpc-test.qday.info";
     const AEVUM_CHAIN_ID_HEX = "0xabe5"; // 44005
     const TUSD8_ADDRESS = "0x456569838f1d43009A91ebA4263147Afd7233483";
     const ERC20_ABI = [
@@ -191,6 +211,8 @@
     const ROUTER_ABI = [
       "function registerPayee(string handle, bytes32 metadataHash)",
       "function confirmPayee(address payee, bytes32 expectedHandleHash) view returns (bool verified, string handle, bytes32 metadataHash)",
+      "function nextInvoiceId() view returns (uint256)",
+      "function getOwnerSessions(address owner) view returns (bytes32[])",
       "function createInvoice((address token, address expectedPayer, address arbiter, uint128 amount, uint64 deadline, uint8 mode, bytes32 expectedPayeeHandleHash, bytes32 memoHash, (address recipient, uint16 bps)[] splits) params) returns (uint256)",
       "function payDirectInvoice(uint256 invoiceId)",
       "function fundEscrow(uint256 invoiceId)",
@@ -203,17 +225,23 @@
       "function fundEscrowWithSession(bytes32 sessionId, uint256 invoiceId)",
       "function getAgentSession(bytes32 sessionId) view returns ((address owner, address sessionKey, address allowedPayee, address agentRegistry, uint128 maxPerTxAmount, uint128 totalBudget, uint128 spent, uint64 expiresAt, bool active, uint256 agentId))",
       "function isSessionActive(bytes32 sessionId) view returns (bool)",
-      "event AgentSessionCreated(bytes32 indexed sessionId, address indexed owner, address indexed sessionKey, uint256 agentId, address allowedPayee, address agentRegistry, uint128 maxPerTxAmount, uint128 totalBudget, uint64 expiresAt)"
+      "event InvoicePaid(uint256 indexed invoiceId, address indexed payer, uint256 amount)",
+      "event EscrowFunded(uint256 indexed invoiceId, address indexed payer, uint256 amount)",
+      "event EscrowReleased(uint256 indexed invoiceId, address indexed payee, uint256 amount)",
+      "event AgentSessionCreated(bytes32 indexed sessionId, address indexed owner, address indexed sessionKey, uint256 agentId, address allowedPayee, address agentRegistry, uint128 maxPerTxAmount, uint128 totalBudget, uint64 expiresAt)",
+      "event AgentSessionSpent(bytes32 indexed sessionId, uint256 indexed invoiceId, uint256 agentId, uint128 amount, uint128 spentTotal, uint128 remainingBudget)"
     ];
 
-    let provider, signer, userAddr;
+    const readProvider = new ethers.JsonRpcProvider(AEVUM_RPC_URL);
+    let provider = readProvider, signer, userAddr;
     const logEl = document.getElementById("log");
     const log = (msg) => { logEl.textContent = msg; };
 
     function getRouter(writable = false) {
       const addr = document.getElementById("routerAddr").value.trim();
       if (!ethers.isAddress(addr)) throw new Error("Enter a valid AevumPayRouter address.");
-      return new ethers.Contract(addr, ROUTER_ABI, writable ? signer : provider);
+      if (writable && !signer) throw new Error("Connect an EIP-1193 wallet first.");
+      return new ethers.Contract(addr, ROUTER_ABI, writable ? signer : (provider || readProvider));
     }
 
     async function refreshBalances() {
@@ -443,6 +471,90 @@
 
     document.getElementById("payWithSessionBtn").onclick = runSessionAction("payDirectWithSession");
     document.getElementById("fundWithSessionBtn").onclick = runSessionAction("fundEscrowWithSession");
+
+    // Aevum Testnet RPC caps eth_getLogs to <= 1,000 blocks per query.
+    async function getLogsChunked(rpc, filter, fromBlock, toBlock, chunkSize = 900) {
+      const logs = [];
+      for (let start = fromBlock; start <= toBlock; start += chunkSize) {
+        const end = Math.min(start + chunkSize - 1, toBlock);
+        const part = await rpc.getLogs({ ...filter, fromBlock: start, toBlock: end });
+        logs.push(...part);
+      }
+      return logs;
+    }
+
+    async function refreshTelemetry() {
+      const summaryEl = document.getElementById("telemetrySummary");
+      const detailsEl = document.getElementById("telemetryDetails");
+      try {
+        const routerAddr = document.getElementById("routerAddr").value.trim();
+        const inspectAddr = document.getElementById("inspectOwnerAddr").value.trim();
+        const router = new ethers.Contract(routerAddr, ROUTER_ABI, readProvider);
+        const tusd8 = new ethers.Contract(TUSD8_ADDRESS, ERC20_ABI, readProvider);
+
+        const [blockNumber, nextIdRaw] = await Promise.all([
+          readProvider.getBlockNumber(),
+          router.nextInvoiceId()
+        ]);
+        const totalInvoices = Math.max(0, Number(nextIdRaw) - 1);
+
+        let inspectedBalance = "--";
+        let copText = "n/a";
+        let sessionsList = [];
+        if (ethers.isAddress(inspectAddr)) {
+          const [bal, cop, sessIds] = await Promise.all([
+            tusd8.balanceOf(inspectAddr),
+            router.confirmPayee(inspectAddr, ethers.keccak256(ethers.toUtf8Bytes("shiki-merchant.aevum"))),
+            router.getOwnerSessions(inspectAddr)
+          ]);
+          inspectedBalance = `${ethers.formatUnits(bal, 6)} tUSD8`;
+          copText = cop.handle ? `${cop.handle} (verified=${cop.verified})` : "unregistered";
+          for (const sid of sessIds.slice(-5)) {
+            const [s, valid] = await Promise.all([router.getAgentSession(sid), router.isSessionActive(sid)]);
+            sessionsList.push({
+              sessionId: `${sid.slice(0, 10)}...${sid.slice(-6)}`,
+              agentId: s.agentId.toString(),
+              active: valid,
+              perTx_tUSD8: ethers.formatUnits(s.maxPerTxAmount, 6),
+              spent_tUSD8: `${ethers.formatUnits(s.spent, 6)} / ${ethers.formatUnits(s.totalBudget, 6)}`
+            });
+          }
+        }
+
+        const STATUS_NAMES = ["Open", "Funded", "Paid", "Released", "Refunded", "Disputed", "Cancelled"];
+        const MODE_NAMES = ["Direct", "Escrow"];
+        const invoices = [];
+        const startId = Math.max(1, totalInvoices - 4);
+        for (let id = startId; id <= totalInvoices; id++) {
+          const [inv, splits] = await router.getInvoice(id);
+          invoices.push({
+            id,
+            amount_tUSD8: ethers.formatUnits(inv.amount, 6),
+            mode: MODE_NAMES[Number(inv.mode)] || String(inv.mode),
+            status: STATUS_NAMES[Number(inv.status)] || String(inv.status),
+            payee: inv.payee,
+            splits: splits.length
+          });
+        }
+
+        const fromBlock = Math.max(0, blockNumber - 2700);
+        const recentLogs = await getLogsChunked(readProvider, { address: routerAddr }, fromBlock, blockNumber, 900);
+
+        summaryEl.textContent =
+          `Block #${blockNumber} | Invoices: ${totalInvoices} | Inspected tUSD8: ${inspectedBalance} | Recent Logs (2.7k blks): ${recentLogs.length}`;
+        detailsEl.textContent = JSON.stringify({
+          inspectedAddress: inspectAddr,
+          confirmationOfPayee: copText,
+          recentInvoices: invoices,
+          agentSessions: sessionsList
+        }, null, 2);
+      } catch (e) {
+        summaryEl.textContent = `RPC read error: ${e.message}`;
+      }
+    }
+
+    document.getElementById("refreshTelemetryBtn").onclick = refreshTelemetry;
+    refreshTelemetry();
   </script>
 </body>
 </html>

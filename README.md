@@ -1,6 +1,9 @@
 # AevumPay — Verifiable Stablecoin Invoice, Confirmation-of-Payee & Split Escrow Router
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-2ea043)](https://dev-shiki.github.io/aevum-pay/)
+
 Built for **Aevum Builder Challenge #1** on DoraHacks (`https://dorahacks.io/hackathon/qday`).
+Live read-only & wallet-enabled prototype: **https://dev-shiki.github.io/aevum-pay/**
 
 ## Problem
 
@@ -91,9 +94,27 @@ forge script script/DeployAevumPay.s.sol:DeployAevumPay \
   --broadcast
 ```
 
-### 4. Interactive Prototype UI
+### 4. Interactive Prototype UI (Live Web Demo & Docker)
 
-Open `frontend/index.html` in a browser (or serve locally with `python -m http.server 8080 --directory frontend`), click **Connect & Switch to Aevum Testnet**, paste your deployed `AevumPayRouter` address, and run the full Register -> Confirm Payee -> Create Invoice -> Approve `tUSD8` -> Pay / Fund / Release / Refund flow.
+- **Hosted Live Demo (Read-Only Telemetry + MetaMask):** `https://dev-shiki.github.io/aevum-pay/`
+- **Local Python Server:** `python -m http.server 8080 --directory frontend`
+- **Packaged Docker Image:**
+
+```bash
+docker build -t aevumpay-demo .
+docker run --rm -p 8080:8080 aevumpay-demo
+```
+
+The UI auto-loads live Aevum Testnet state (block height, Confirmation of Payee, invoices, and agent sessions) via `https://rpc-test.qday.info` without requiring a wallet, and switches MetaMask to Chain ID `44005` when connecting.
+
+### 5. Optional Live Escrow & Session Revoke Script
+
+```bash
+forge script script/LiveEscrowAndRevoke.s.sol:LiveEscrowAndRevoke \
+  --rpc-url https://rpc-test.qday.info \
+  --private-key $PRIVATE_KEY \
+  --broadcast
+```
 
 ## Security & Controls
 
