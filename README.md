@@ -1,4 +1,4 @@
-# AevumPay — Verifiable Stablecoin Invoice, Confirmation-of-Payee & Split Escrow Router
+# AevumPay: Verifiable Stablecoin Invoice, Confirmation-of-Payee & Split Escrow Router
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-2ea043)](https://dev-shiki.github.io/aevum-pay/)
 
@@ -15,7 +15,7 @@ Stablecoin payments on EVM chains suffer from three practical gaps for merchants
 ## Solution
 
 `AevumPayRouter` delivers one cohesive, end-to-end **tUSD8** payment flow on **Aevum Testnet**:
-- **On-Chain Confirmation of Payee (CoP):** Payees register unique handles (`registerPayee(handle, metadataHash)`). Invoices can enforce `expectedPayeeHandleHash` at both creation and settlement—if the payee deactivates or mismatches, payment reverts.
+- **On-Chain Confirmation of Payee (CoP):** Payees register unique handles (`registerPayee(handle, metadataHash)`). Invoices can enforce `expectedPayeeHandleHash` at both creation and settlement, reverting if the payee deactivates or mismatches.
 - **Direct & Escrowed Modes:**
   - `Direct`: Atomic `tUSD8` settlement with up to 5 configurable basis-point splits (`MAX_BPS = 10_000`).
   - `Escrow`: Payer funds `tUSD8` into the router; payer or arbiter releases to splits on delivery, payer self-refunds after `deadline` (`refundExpiredEscrow`), or `arbiter` resolves disputes (`resolveDispute(invoiceId, payeeBps)`).
